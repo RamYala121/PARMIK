@@ -9,17 +9,23 @@ def extract_best_match_lengths(sam_file, output_tsv):
     samfile = pysam.AlignmentFile(sam_file, "r")
 
     for read in samfile.fetch(until_eof=True):
-        if read.is_unmapped:
-            continue
-
         query_id = read.query_name
-        alignment_len = read.query_alignment_length
 
-        # Get alignment score (AS tag) or fall back to mapping quality
-        score = read.get_tag("AS") if read.has_tag("AS") else read.mapping_quality
+        if read.is_unmapped:
+            score = -1  # Use -1 so any mapped match (> -1) automatically overrides an unmapped record
+            alignment_len = 0
+        else:
+            # Get alignment score (AS tag) or fall back to mapping quality
+            score = (
+                read.get_tag("AS") if read.has_tag("AS") else read.mapping_quality
+            )
+            alignment_len = read.query_alignment_length
 
-        # Keep the match with the highest score per query read
-        if query_id not in best_matches or score > best_matches[query_id]["score"]:
+        # Store or update the best record for this query
+        if (
+            query_id not in best_matches
+            or score > best_matches[query_id]["score"]
+        ):
             best_matches[query_id] = {
                 "score": score,
                 "alignment_length": alignment_len,
@@ -37,7 +43,9 @@ def extract_best_match_lengths(sam_file, output_tsv):
     )
 
     df.to_csv(output_tsv, sep="\t", index=False)
-    print(f"Saved raw data to {output_tsv}")
+    print(
+        f"Saved raw data to {output_tsv} (Total queries processed: {len(df)})"
+    )
 
 
 if __name__ == "__main__":

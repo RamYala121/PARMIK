@@ -1,97 +1,77 @@
-import os
 import matplotlib.pyplot as plt
 import pandas as pd
-import pysam
 import seaborn as sns
 
 
-def parse_sam_best_matches(sam_file):
-    """Parses a SAM file and extracts the alignment length for the best match per query."""
-    best_matches = {}
+def generate_histogram(
+    tsv_path="minimap2_best_match_lengths.tsv",
+    output_png="minimap2_best_match_lengths_updated.png",
+):
+    # Load the verified dataset
+    df = pd.read_csv(tsv_path, sep="\t")
 
-    print(f"Parsing {sam_file}...")
-    samfile = pysam.AlignmentFile(sam_file, "r")
+    # Calculate summary metrics
+    unmapped_count = (df["Best_Match_Length"] == 0).sum()
+    median_val = df["Best_Match_Length"].median()
+    mean_val = df["Best_Match_Length"].mean()
 
-    for read in samfile.fetch(until_eof=True):
-        # Skip unmapped reads
-        if read.is_unmapped:
-            continue
-
-        query_id = read.query_name
-        alignment_len = read.query_alignment_length  # Length of the aligned part of the query
-
-        # Extract alignment score (AS tag) if present, otherwise use mapq or alignment length
-        score = read.get_tag("AS") if read.has_tag("AS") else read.mapping_quality
-
-        # Keep the record with the highest alignment score/mapping quality for each query
-        if query_id not in best_matches or score > best_matches[query_id]["score"]:
-            best_matches[query_id] = {
-                "score": score,
-                "alignment_length": alignment_len,
-            }
-
-    samfile.close()
-
-    df = pd.DataFrame.from_dict(best_matches, orient="index")
-    print(f"Extracted best matches for {len(df)} mapped queries.")
-    return df
-
-
-def plot_histogram(df, output_img="minimap2_best_match_lengths.png"):
-    """Generates and saves a histogram of best match alignment lengths."""
-    if df.empty:
-        print("No mapped reads found in the SAM file.")
-        return
-
+    # Configure plot styling
     plt.figure(figsize=(10, 6))
     sns.set_style("whitegrid")
 
-    # Draw histogram with KDE curve
+    # Plot histogram
     sns.histplot(
-        df["alignment_length"],
-        kde=True,
+        df["Best_Match_Length"],
         bins=30,
         color="skyblue",
         edgecolor="black",
+        kde=False,
     )
 
+    # Add title and axis labels
     plt.title(
-        "Minimap2: Distribution of Best Match Alignment Lengths per Query",
+        "Minimap2: Best Match Alignment Lengths (Including Unmapped Reads)",
         fontsize=14,
         fontweight="bold",
     )
     plt.xlabel("Alignment Length (bp)", fontsize=12)
     plt.ylabel("Query Count", fontsize=12)
 
-    # Annotate summary statistics on the plot
-    median_len = df["alignment_length"].median()
-    mean_len = df["alignment_length"].mean()
+    # Add vertical lines for Median and Mean
     plt.axvline(
-        median_len,
+        median_val,
         color="red",
         linestyle="--",
         linewidth=1.5,
-        label=f"Median: {median_len:.1f} bp",
+        label=f"Median: {median_val:.1f} bp",
     )
     plt.axvline(
-        mean_len,
+        mean_val,
         color="green",
         linestyle=":",
         linewidth=1.5,
-        label=f"Mean: {mean_len:.1f} bp",
+        label=f"Mean: {mean_val:.1f} bp",
+    )
+
+    # Annotate the unmapped reads peak at 0 bp
+    plt.annotate(
+        f"Unmapped (0 bp): {unmapped_count:,}",
+        xy=(0, unmapped_count),
+        xytext=(20, unmapped_count * 0.85),
+        arrowprops=dict(facecolor="black", shrink=0.05, width=1, headwidth=6),
+        fontsize=11,
+        fontweight="bold",
+        color="darkred",
     )
 
     plt.legend(fontsize=11)
     plt.tight_layout()
-    plt.savefig(output_img, dpi=300)
-    print(f"Histogram successfully saved to {output_img}")
+
+    # Save high-resolution PNG
+    plt.savefig(output_png, dpi=300)
+    plt.close()
+    print(f"Successfully generated and saved plot to {output_png}")
 
 
 if __name__ == "__main__":
-    sam_filename = "minimap2_output.sam"
-
-    if not os.path.exists(sam_filename):
-        print(f"Error: {sam_filename} does not exist in the current directory.")
-    else:
-        df_results = parse_sam_best_matches(sam_filename)
-        plot_histogram(df_results)
+    generate_histogram()
