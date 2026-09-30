@@ -1,7 +1,6 @@
 # Ignore all .env files
 *.o
 *.err
-*.png
 *.jpg
 *.slurm
 *.out
